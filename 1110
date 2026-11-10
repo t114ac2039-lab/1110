@@ -1,0 +1,259 @@
+const int buttonPin = 2;
+
+// The Pin of the RGB LED Module
+const int RedPin = 9;
+const int GLedPin = 10;
+const int BLedPin = 11;
+
+// The current Push button state
+int buttonState = 0;
+// The variable used to memorize whether the user has pressed the button
+bool buttonPressed = false;
+// The timer used to count the pressing time
+unsigned long pressingTime = 0;
+
+// The Current Light Stick number
+// 0: white, 1: red, 2: green, 3: blue, 4: yellow...
+int lightNum = 0;
+
+// The Current Light Stick Color
+int RLightColor = 0;
+int GLightColor = 0;
+int BLightColor = 0;
+
+int RCurrentColor = 0;
+int GCurrentColor = 0;
+int BCurrentColor = 0;
+
+// Light Stick Current Mode
+// Mode 0: Constant Light Mode
+// Mode 1: Blink Mode
+// Mode 2: Breathing Light Mode
+// Mode 3: Rainbow Cycle Mode (NEW!)
+int currentMode = 0;
+
+// Variables for blink mode
+unsigned long blinkTimer = 0;
+const int blinkInterval = 500;
+bool blinkOn = true;
+
+// Variables for fading mode (共陽極呼吸燈專用變數)
+const int fadeAmount = 5;      
+int fadeDirection = 1;
+int breathingValue = 0;        // 0 = 最亮, 255 = 熄滅
+
+// Variables for rainbow mode (彩虹流動專用變數)
+unsigned long rainbowTimer = 0;
+int rainbowStep = 0;           // 彩虹階段計數器 (0 ~ 765)
+
+
+// ==========================================
+// 2. 初始化設定
+// ==========================================
+void setup()
+{
+  pinMode(buttonPin, INPUT_PULLUP); 
+  pinMode(RedPin, OUTPUT);
+  pinMode(GLedPin, OUTPUT);
+  pinMode(BLedPin, OUTPUT);
+
+  // 初始化預設顏色
+  changeLEDColor();
+}
+
+
+// ==========================================
+// 3. 主迴圈與按鈕偵測
+// ==========================================
+void loop()
+{
+  checkButton();
+  updateLEDColor();
+  setRGBLEDColor(RCurrentColor, GCurrentColor, BCurrentColor);
+}
+
+void checkButton(){
+  buttonState = digitalRead(buttonPin);
+
+  if(buttonState == LOW && !buttonPressed){
+    pressingTime = millis();
+    buttonPressed = true;
+  }
+  if(buttonState == HIGH && buttonPressed){
+    unsigned long holdTime = millis() - pressingTime; // 計算按住總時間 (毫秒)
+    
+    if (holdTime < 2000) {
+      // 1. 短按 (小於 2 秒)：切換顏色
+      changeLEDColor();
+    }
+    else if (holdTime >= 2000 && holdTime < 3500) {
+      // 2. 按住 2 ~ 3.5 秒：切換到 Mode 1 (閃爍模式)
+      if (currentMode == 1) { setMode(0); } else { setMode(1); }
+    }
+    else if (holdTime >= 3500 && holdTime < 5000) {
+      // 3. 按住 3.5 ~ 5 秒：切換到 Mode 2 (呼吸燈模式)
+      if (currentMode == 2) { setMode(0); } else { setMode(2); }
+    }
+    else if (holdTime >= 5000) {
+      // 4. 長按超過 5 秒：切換到 Mode 3 (彩虹流動模式)
+      if (currentMode == 3) { setMode(0); } else { setMode(3); }
+    }
+    
+    buttonPressed = false;
+  }
+}
+
+
+// ==========================================
+// 4. 模式切換與顏色邏輯
+// ==========================================
+void setMode(int targetMode) {
+  currentMode = targetMode;
+
+  if (currentMode == 1) {
+    blinkTimer = millis();
+    blinkOn = true;
+  }
+  else if (currentMode == 2) {
+    breathingValue = 0;
+    fadeDirection = 1;
+  }
+  else if (currentMode == 3) {
+    rainbowTimer = millis();
+    rainbowStep = 0;
+  }
+}
+
+void changeLEDColor(){
+  lightNum = lightNum + 1;
+  if(lightNum >= 5){
+    lightNum = 0;
+  }
+
+  // 共陽極 LED 顏色對應 (0 = 開/最亮, 255 = 關)
+  if(lightNum == 0){
+    // white
+    RLightColor = 0;
+    GLightColor = 0;
+    BLightColor = 0;
+  }
+  else if(lightNum == 1){
+    // red
+    RLightColor = 0;
+    GLightColor = 255;
+    BLightColor = 255;
+  }
+  else if(lightNum == 2){
+    // green
+    RLightColor = 255;
+    GLightColor = 0;
+    BLightColor = 255;
+  }
+  else if(lightNum == 3){
+    // blue
+    RLightColor = 255;
+    GLightColor = 255;
+    BLightColor = 0;
+  }
+  else if(lightNum == 4){
+    // yellow
+    RLightColor = 0;
+    GLightColor = 0;
+    BLightColor = 255;
+  }
+
+  RCurrentColor = RLightColor;
+  GCurrentColor = GLightColor;
+  BCurrentColor = BLightColor;
+}
+
+void updateLEDColor(){
+  if(currentMode == 0){
+    // Constant Light Mode
+    RCurrentColor = RLightColor;
+    GCurrentColor = GLightColor;
+    BCurrentColor = BLightColor;
+  }
+  else if(currentMode == 1){
+    // Blink Mode
+    unsigned long currentTime = millis();
+    if(currentTime - blinkTimer > (unsigned long)blinkInterval){
+      blinkOn = !blinkOn;
+      blinkTimer = currentTime;
+    }
+
+    if(blinkOn){
+      RCurrentColor = RLightColor;
+      GCurrentColor = GLightColor;
+      BCurrentColor = BLightColor;
+    }
+    else{
+      RCurrentColor = 255;
+      GCurrentColor = 255;
+      BCurrentColor = 255;
+    }
+  }
+  else if (currentMode == 2){
+    // Breathing Light Mode
+    static unsigned long fadeTimer = 0;
+    unsigned long currentTime = millis();
+    
+    if (currentTime - fadeTimer > 15) {
+      fadeTimer = currentTime;
+      breathingValue += fadeDirection * fadeAmount;
+
+      if (breathingValue >= 255) {
+        breathingValue = 255;
+        fadeDirection = -1;
+      }
+      else if (breathingValue <= 0) {
+        breathingValue = 0;
+        fadeDirection = 1;
+      }
+    }
+
+    RCurrentColor = (RLightColor == 0) ? breathingValue : 255;
+    GCurrentColor = (GLightColor == 0) ? breathingValue : 255;
+    BCurrentColor = (BLightColor == 0) ? breathingValue : 255;
+  }
+  else if (currentMode == 3){
+    // Rainbow Cycle Mode (彩虹自動漸變流動)
+    unsigned long currentTime = millis();
+    if (currentTime - rainbowTimer > 10) { // 每 10 毫秒變換一次彩虹進度
+      rainbowTimer = currentTime;
+      rainbowStep = (rainbowStep + 2) % 765; // 數值越大流動越快
+    }
+
+    // 將 0 ~ 765 的階段轉換為共陽極的平滑 RGB 漸層
+    int rVal, gVal, bVal;
+    if (rainbowStep < 255) {
+      rVal = 255 - rainbowStep;
+      gVal = rainbowStep;
+      bVal = 255;
+    } else if (rainbowStep < 510) {
+      int adjustedStep = rainbowStep - 255;
+      rVal = 255;
+      gVal = 255 - adjustedStep;
+      bVal = adjustedStep;
+    } else {
+      int adjustedStep = rainbowStep - 510;
+      rVal = adjustedStep;
+      gVal = 255;
+      bVal = 255 - adjustedStep;
+    }
+
+    RCurrentColor = rVal;
+    GCurrentColor = gVal;
+    BCurrentColor = bVal;
+  }
+}
+
+
+// ==========================================
+// 5. 腳本輸出控制
+// ==========================================
+void setRGBLEDColor(int red, int green, int blue){
+  analogWrite(RedPin, red);
+  analogWrite(GLedPin, green);
+  analogWrite(BLedPin, blue);
+}
